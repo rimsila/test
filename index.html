@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+
+  <title>Qr Code Template</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+
+<body>
+
+  <div class="container">
+    <!------------------------------  header ----------------------------->
+    <header class="header">
+      <a href="index.html">
+        <img class="header_logo" src="img/tkexpress-payway-logo_01.png" class="img-logo" />
+      </a>
+      <h2>Checkout</h2>
+    </header>
+    <!------------------------------  content ----------------------------->
+    <div class="content">
+      <!-------------  input_form ------------>
+      <section class="input_form">
+        <img src="img/ic_bakongLogo@3x.png" alt="" class="form_logo">
+        <h4>Input Provided Transaction Code</h4>
+        <p class="form_desc">
+          The Code will provided after Scanned the QR Code
+        </p>
+        <form onsubmit="submitForm();" id="tr_form" class="input_field" action="#" >
+          <input  class="input_tr_code" type="tel" name="tr_code" id="tr_code" required autofocus>
+          <button class="btn_tr" type="submit">Done</button>
+        </form>
+        <h4 class="error" id="hasErrorTrcode" style="display: none;">The Provided Transaction Code is invalid!</h4>
+
+      </section>
+
+      <!-------------  qr_code ------------>
+      <section class="qr_code_section">
+        <h4 style="margin-top: 0;">Scan QR Code</h4>
+        <p class="qr_desc">
+          Please use Bakong App to scan the provided QR Code.
+        </p>
+        <div class="qr_code">
+          <canvas id="canvas_qr_code"></canvas>
+        </div>
+        <span class="qr_desc">
+          See <a class="qr_tutorial_link" href="/#" rel="noopener" target="_blank">
+            Tutorial How-to use Bakong Pay
+          </a>
+        </span>
+      </section>
+    </div>
+  </div>
+  </div>
+</body>
+
+<!------------------------------  script js  ----------------------------->
+
+<!--Library https://www.npmjs.com/package/qrcode#installation -->
+<script src="js/qrcode.min.js"></script>
+
+<script type="text/JavaScript">
+
+    // handle error style
+      const isHasErrorTr =(isShow)=>{
+        document.getElementById("hasErrorTrcode").style.display = isShow ?'block':'none';
+        document.getElementById("tr_code").style.color = isShow ? "red":'none';
+        document.getElementById("tr_form").style=  isShow ? "border: red; border: 1px solid red;" : "";
+      }
+    // ---------- Submit form -----------
+    function submitForm() {
+      document.getElementById("tr_form").submit();
+      console.log("The form was submitted");
+      isHasErrorTr(true);
+    }
+
+    // ---------- Qr code -----------
+      QRCode.toCanvas(
+       document.getElementById("canvas_qr_code"),
+      "bloc431c61e2f5b8",
+        function (error) {
+        if (error) {
+          console.error(error);
+        }else{
+        console.log("success!");
+        }
+        }
+    );
+
+
+  </script>
+
+</html>

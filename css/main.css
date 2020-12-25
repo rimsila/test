@@ -1,0 +1,120 @@
+/** ---------- Global css ---------- */
+* {
+  box-sizing: border-box;
+}
+body {
+  /* background-color: #ededed; */
+  font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 15px;
+}
+*:focus {
+  outline: none;
+}
+a:hover {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+p {
+  line-height: 22px;
+  font-size: 16px;
+  color: #ABB0C2;
+  margin: 15px;
+}
+
+/* ---------- variable ---------- */
+:root {
+  --primary: #e1232e;
+  --secondary: #f6f7fb;
+  --link: #64c7f2;
+}
+
+input {
+  font-size: medium;
+}
+a {
+  font-size: large;
+  font-weight: bold;
+}
+section {
+  margin-bottom: 30px;
+}
+.error {
+  color: var(--primary);
+  margin: 12px;
+  font-size: 14px;
+}
+/* ---------- homepage page ---------- */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  background-color: var(--secondary);
+  padding: 0px 20px;
+}
+.header_logo {
+  width: 120px;
+  object-fit: cover;
+}
+.content {
+  /* 100vh - header/ footer|spacing */
+  height: calc(100vh - 72px);
+  padding: 20px 25px 25px;
+  display: flex;
+  flex-direction: column;
+  justify-content: start;
+  text-align: center;
+}
+.input_form {
+  width: 100%;
+  max-width: 400px;
+  align-self: center;
+
+}
+.form_logo {
+  width: 140px;
+  object-fit: cover;
+}
+.input_tr_code {
+  padding: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+.input_field {
+  display: flex;
+  background-color: var(--secondary);
+  border-radius: 3em;
+  align-items: center;
+}
+.input_field .btn_tr {
+  border: 0;
+  padding: 9px 22px;
+  margin: 0px 6px 0 2px;
+  background: var(--primary);
+  border-radius: 3em;
+  color: white;
+}
+.qr_code_section {
+  max-width: 320px;
+  align-self: center;
+}
+#canvas_qr_code{
+  /* width: 250px !important;
+  height: 250px !important; */
+}
+.qr_desc{
+  margin-bottom: 0;
+}
+.qr_tutorial_link{
+  color: var(--link);
+}
