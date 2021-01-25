@@ -23,11 +23,16 @@ a:hover {
   cursor: pointer;
   text-decoration: none;
 }
-
+input::-webkit-input-placeholder {
+  font-size: small;
+}
+input::placeholder {
+  font-size: small;
+}
 p {
   line-height: 22px;
   font-size: 16px;
-  color: #ABB0C2;
+  color: #abb0c2;
   margin: 15px;
 }
 
@@ -80,18 +85,18 @@ section {
   width: 100%;
   max-width: 400px;
   align-self: center;
-
 }
 .form_logo {
   width: 140px;
   object-fit: cover;
 }
 .input_tr_code {
-  padding: 12px;
+  padding: 16px;
   width: 100%;
   border: 0;
   background: transparent;
 }
+
 .input_field {
   display: flex;
   background-color: var(--secondary);
@@ -112,13 +117,13 @@ section {
   max-width: 320px;
   align-self: center;
 }
-#canvas_qr_code{
+#canvas_qr_code {
   /* width: 250px !important;
   height: 250px !important; */
 }
-.qr_desc{
+.qr_desc {
   margin-bottom: 0;
 }
-.qr_tutorial_link{
+.qr_tutorial_link {
   color: var(--link);
 }
