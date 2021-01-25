@@ -60,6 +60,8 @@ section {
   justify-content: space-between;
   background-color: var(--secondary);
   padding: 0px 20px;
+  align-items: center;
+  height: 80px;
 }
 .header_logo {
   width: 120px;
