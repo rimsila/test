@@ -103,6 +103,8 @@ section {
   background: var(--primary);
   border-radius: 3em;
   color: white;
+  display: flex;
+  justify-content: center;
 }
 .qr_code_section {
   max-width: 320px;

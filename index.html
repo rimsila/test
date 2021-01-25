@@ -18,7 +18,10 @@
       <a href="index.html">
         <img class="header_logo" src="img/tkexpress-payway-logo_01.png" class="img-logo" />
       </a>
-      <h2>Checkout</h2>
+     <div>
+      <h3 style="line-height: 2px;">Checkout</h3>
+      <h2>$ 200.00</h2>
+     </div>
     </header>
     <!------------------------------  content ----------------------------->
     <div class="content">
@@ -30,7 +33,7 @@
           The Code will provided after Scanned the QR Code
         </p>
         <form onsubmit="submitForm();" id="tr_form" class="input_field" action="#" >
-          <input  class="input_tr_code" type="tel" name="tr_code" id="tr_code" required autofocus autocomplete="off">
+          <input  class="input_tr_code" type="tel" name="tr_code" id="tr_code" required autofocus autocomplete="off" >
           <button class="btn_tr" type="submit">Done</button>
         </form>
         <h4 class="error" id="hasErrorTrcode" style="display: none;">The Provided Transaction Code is invalid!</h4>
