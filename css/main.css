@@ -74,7 +74,7 @@ section {
 }
 .content {
   /* 100vh - header/ footer|spacing */
-  height: calc(100vh - 72px);
+  /* height: calc(100vh - 72px); */
   padding: 20px 25px 25px;
   display: flex;
   flex-direction: column;
