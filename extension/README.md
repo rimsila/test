@@ -1,35 +1,132 @@
-# URL Preview Side Panel
+# Todo Developer Side Panel
 
-A Chrome Manifest V3 extension for previewing web URLs in Chrome's right-side panel.
+A Chrome Manifest V3 side-panel extension plus a local Node.js server for:
 
-## Install
+- live project preview with automatic iframe refresh
+- local Git status, pull, commit, push, and optional auto sync
+- a Streamable HTTP MCP endpoint for ChatGPT and other MCP clients
+- protected project file reading and editing through MCP tools
 
-1. Download the files in this folder.
-2. Open `chrome://extensions` in Chrome.
-3. Enable **Developer mode**.
-4. Click **Load unpacked** and select this `extension` folder.
-5. Pin the extension, then click its toolbar icon to open the side panel.
+## Project layout
 
-## Notes
+```text
+extension/
+├─ manifest.json
+├─ background.js
+├─ sidepanel.html
+├─ sidepanel.css
+├─ sidepanel.js
+└─ server/
+   ├─ src/server.js
+   ├─ scripts/smoke-test.js
+   ├─ package.json
+   ├─ .env.example
+   └─ settings.json
+```
 
-- Use **Preview** to load a URL.
-- Use **Use current tab** to copy the active page into the preview.
-- Use the **− / +** button to collapse or expand the preview.
-- Some websites prevent iframe embedding with security headers. For those sites, use **Open in new tab**.
+## 1. Configure and run the local server
 
-## Local Git server
+```bash
+cd extension/server
+npm install
+copy .env.example .env
+npm start
+```
 
-1. Open the `server` folder in a terminal.
-2. Copy `.env.example` to `.env` and set `REPO_PATH` and a long `EXTENSION_TOKEN`.
-3. Run `npm install`, then `npm start`.
-4. Paste the same token into the extension's **Server token** field.
+On macOS or Linux, use `cp .env.example .env` instead of `copy`.
 
-The Git panel supports status, manual pull, commit, push, and auto sync. Auto sync is off by default and only runs when the working tree is clean. Pull uses `--ff-only` to avoid automatic merge commits.
+Edit `.env` first:
 
-The side panel has persistent **Preview** and **Git** tabs. It remembers the selected tab, last preview URL, collapsed preview state, server token, and server-side auto-sync preference.
+- `REPO_PATH`: local Git repository controlled by the Git tab and Git MCP tools.
+- `PROJECT_PATH`: project exposed to preview and project-file MCP tools.
+- `EXTENSION_TOKEN`: long random token used only by the Chrome extension API.
+- `MCP_TOKEN`: optional Bearer token for MCP clients that support a static token.
+- `PREVIEW_COMMAND`: leave blank for the built-in static server, or set a development command such as `npm run dev -- --host 127.0.0.1`.
+- `PREVIEW_URL`: URL the extension should open after starting preview.
 
-## ChatGPT Web and MCP
+Generate tokens with Node.js:
 
-The server exposes `http://127.0.0.1:4783/mcp` with tools for project files, Git, and the preview process. ChatGPT Web requires HTTPS, so use OpenAI Secure MCP Tunnel, ngrok, or Cloudflare Tunnel and register the resulting `/mcp` URL in ChatGPT Developer Mode.
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
-The extension listens to `/api/events` using Server-Sent Events. Project file changes automatically refresh the preview iframe. Configure `PROJECT_PATH`, `PREVIEW_COMMAND`, and `PREVIEW_URL` in `.env`.
+## 2. Load the Chrome extension
+
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Choose **Load unpacked**.
+4. Select the `extension` folder.
+5. Open the side panel and paste `EXTENSION_TOKEN` into the Git tab.
+
+The extension remembers the selected tab, token, last preview URL, collapsed state, and tunnel URL in `chrome.storage.local`.
+
+## 3. MCP endpoint and tools
+
+The local MCP endpoint is:
+
+```text
+http://127.0.0.1:4783/mcp
+```
+
+It uses MCP Streamable HTTP and exposes 13 tools:
+
+- `project_info`
+- `list_files`
+- `read_file`
+- `write_file`
+- `replace_in_file`
+- `search_files`
+- `delete_path`
+- `git_status`
+- `git_diff`
+- `git_pull`
+- `git_commit`
+- `git_push`
+- `preview_control`
+
+File tools are restricted to `PROJECT_PATH`. Path traversal, symlink escapes, `.git`, `.env`, `node_modules`, SSH keys, and common credential files are blocked. Writes are atomic and support SHA-256 optimistic concurrency checks.
+
+## 4. Connect ChatGPT Web
+
+ChatGPT needs a public HTTPS MCP URL; it cannot directly reach `127.0.0.1` on your computer.
+
+1. Run the server locally.
+2. Create a private HTTPS tunnel to `http://127.0.0.1:4783` using a trusted tunnel provider.
+3. Copy the tunnel URL ending in `/mcp`, for example `https://example-tunnel.test/mcp`.
+4. In ChatGPT, enable Developer Mode, create a developer app, and enter that MCP URL.
+
+### Authentication note
+
+For clients that support a static Bearer token, keep `ALLOW_UNAUTHENTICATED_MCP=false` and configure `MCP_TOKEN`.
+
+For temporary ChatGPT developer-mode testing without OAuth, you may set:
+
+```env
+ALLOW_UNAUTHENTICATED_MCP=true
+```
+
+Only do this while the tunnel is private and active for your test. Anyone who can reach an unauthenticated tunnel URL can invoke file and Git write tools. Turn it off after testing. A production/public deployment should use OAuth or an authenticated gateway.
+
+## 5. Live preview behavior
+
+When `PREVIEW_COMMAND` is blank, the server hosts `PROJECT_PATH` at `PREVIEW_URL` using a built-in static server. When a project file changes, the server emits an SSE event and the extension refreshes the preview iframe.
+
+For framework projects, set `PREVIEW_COMMAND` and `PREVIEW_URL` to your framework's development server. Example:
+
+```env
+PREVIEW_COMMAND=npm run dev -- --host 127.0.0.1
+PREVIEW_URL=http://127.0.0.1:5173
+```
+
+## 6. Verify the implementation
+
+```bash
+npm run check
+npm run test:mcp
+```
+
+The smoke test checks extension API authentication, MCP authentication, initialize, tool discovery, a tool call, built-in preview startup, and MCP status.
+
+## Git auto sync
+
+Auto sync is off by default. When enabled, it only pulls and pushes if the working tree is clean. Pull uses `--ff-only`, so it never creates an automatic merge commit.
