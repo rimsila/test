@@ -1,10 +1,13 @@
 {
-  "name": "url-preview-git-server",
-  "version": "1.0.0",
+  "name": "todo-local-mcp-server",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --check scripts/smoke-test.js",
+    "test:mcp": "node scripts/smoke-test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.4",
