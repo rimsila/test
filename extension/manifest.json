@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Todo Developer Side Panel",
-  "version": "1.1.0",
-  "description": "Preview local projects, manage Git, and monitor a ChatGPT MCP server from Chrome's side panel.",
+  "version": "1.2.0",
+  "description": "Preview local projects, manage Git, and inspect a ChatGPT MCP server from Chrome's side panel.",
   "permissions": ["sidePanel", "storage", "activeTab", "clipboardWrite"],
   "host_permissions": ["<all_urls>", "http://127.0.0.1:4783/*"],
   "background": {
