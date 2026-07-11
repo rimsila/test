@@ -1,49 +1,65 @@
-const form = document.getElementById('urlForm');
-const input = document.getElementById('urlInput');
-const frame = document.getElementById('previewFrame');
-const message = document.getElementById('message');
-const previewArea = document.getElementById('previewArea');
-const collapseButton = document.getElementById('collapseButton');
-const currentTabButton = document.getElementById('currentTabButton');
-const openTabButton = document.getElementById('openTabButton');
-const serverToken = document.getElementById('serverToken');
-const serverStatus = document.getElementById('serverStatus');
-const gitBranch = document.getElementById('gitBranch');
-const gitChanges = document.getElementById('gitChanges');
-const gitTracking = document.getElementById('gitTracking');
-const autoSyncToggle = document.getElementById('autoSyncToggle');
-const refreshGitButton = document.getElementById('refreshGitButton');
-const pullButton = document.getElementById('pullButton');
-const pushButton = document.getElementById('pushButton');
-const commitMessage = document.getElementById('commitMessage');
-const commitButton = document.getElementById('commitButton');
-const gitOutput = document.getElementById('gitOutput');
-const livePreviewStatus = document.getElementById('livePreviewStatus');
-const startPreviewButton = document.getElementById('startPreviewButton');
-const stopPreviewButton = document.getElementById('stopPreviewButton');
+const $ = (id) => document.getElementById(id);
+
+const form = $('urlForm');
+const input = $('urlInput');
+const frame = $('previewFrame');
+const message = $('message');
+const previewArea = $('previewArea');
+const collapseButton = $('collapseButton');
+const currentTabButton = $('currentTabButton');
+const openTabButton = $('openTabButton');
+const serverToken = $('serverToken');
+const serverStatus = $('serverStatus');
+const gitBranch = $('gitBranch');
+const gitChanges = $('gitChanges');
+const gitTracking = $('gitTracking');
+const autoSyncToggle = $('autoSyncToggle');
+const refreshGitButton = $('refreshGitButton');
+const pullButton = $('pullButton');
+const pushButton = $('pushButton');
+const commitMessage = $('commitMessage');
+const commitButton = $('commitButton');
+const gitOutput = $('gitOutput');
+const livePreviewStatus = $('livePreviewStatus');
+const startPreviewButton = $('startPreviewButton');
+const restartPreviewButton = $('restartPreviewButton');
+const stopPreviewButton = $('stopPreviewButton');
+const refreshMcpButton = $('refreshMcpButton');
+const mcpStatus = $('mcpStatus');
+const mcpTransport = $('mcpTransport');
+const mcpTools = $('mcpTools');
+const mcpAuth = $('mcpAuth');
+const localMcpUrl = $('localMcpUrl');
+const tunnelMcpUrl = $('tunnelMcpUrl');
+const copyLocalMcpButton = $('copyLocalMcpButton');
+const copyTunnelMcpButton = $('copyTunnelMcpButton');
+const mcpOutput = $('mcpOutput');
 const API_URL = 'http://127.0.0.1:4783/api';
-const previewTab = document.getElementById('previewTab');
-const gitTab = document.getElementById('gitTab');
-const previewView = document.getElementById('previewView');
-const gitView = document.getElementById('gitView');
+
+const views = {
+  preview: { tab: $('previewTab'), panel: $('previewView') },
+  git: { tab: $('gitTab'), panel: $('gitView') },
+  mcp: { tab: $('mcpTab'), panel: $('mcpView') },
+};
 
 let currentUrl = '';
 let eventSource = null;
+let reloadTimer = null;
 
 async function selectView(view, persist = true) {
-  const showGit = view === 'git';
-  previewTab.classList.toggle('active', !showGit);
-  gitTab.classList.toggle('active', showGit);
-  previewTab.setAttribute('aria-selected', String(!showGit));
-  gitTab.setAttribute('aria-selected', String(showGit));
-  previewView.hidden = showGit;
-  gitView.hidden = !showGit;
-  if (persist) await chrome.storage.local.set({ activeView: showGit ? 'git' : 'preview' });
-  if (showGit) refreshGit();
+  const selected = views[view] ? view : 'preview';
+  for (const [name, item] of Object.entries(views)) {
+    const active = name === selected;
+    item.tab.classList.toggle('active', active);
+    item.tab.setAttribute('aria-selected', String(active));
+    item.panel.hidden = !active;
+  }
+  if (persist) await chrome.storage.local.set({ activeView: selected });
+  if (selected === 'git') refreshGit();
+  if (selected === 'mcp') refreshMcp();
 }
 
-previewTab.addEventListener('click', () => selectView('preview'));
-gitTab.addEventListener('click', () => selectView('git'));
+for (const [name, item] of Object.entries(views)) item.tab.addEventListener('click', () => selectView(name));
 
 function normalizeUrl(value) {
   const candidate = value.trim();
@@ -71,13 +87,23 @@ async function preview(value) {
   }
 }
 
+function reloadPreview() {
+  if (!currentUrl || previewArea.classList.contains('collapsed')) return;
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
+    const url = new URL(currentUrl);
+    url.searchParams.set('__live_reload', Date.now());
+    frame.src = url.href;
+  }, 120);
+}
+
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   preview(input.value);
 });
 
 frame.addEventListener('load', () => {
-  if (currentUrl) setMessage('Preview loaded. Some websites may block iframe previews.');
+  if (currentUrl) setMessage('Preview loaded. File changes will refresh this frame.');
 });
 
 collapseButton.addEventListener('click', async () => {
@@ -100,8 +126,7 @@ currentTabButton.addEventListener('click', async () => {
 
 openTabButton.addEventListener('click', () => {
   try {
-    const url = normalizeUrl(input.value || currentUrl);
-    chrome.tabs.create({ url });
+    chrome.tabs.create({ url: normalizeUrl(input.value || currentUrl) });
   } catch (error) {
     setMessage(error.message, true);
   }
@@ -111,7 +136,7 @@ async function api(path, options = {}) {
   const token = serverToken.value.trim();
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', 'X-Extension-Token': token, ...(options.headers || {}) }
+    headers: { 'Content-Type': 'application/json', 'X-Extension-Token': token, ...(options.headers || {}) },
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
@@ -143,7 +168,7 @@ async function runGitAction(path, body) {
   try {
     showGitOutput('Working…');
     const result = await api(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined });
-    showGitOutput(result.output || result.message);
+    showGitOutput(result.output || result.message || result);
     await refreshGit();
   } catch (error) {
     showGitOutput(error.message);
@@ -153,14 +178,16 @@ async function runGitAction(path, body) {
 function setLivePreviewStatus(status) {
   livePreviewStatus.textContent = status.running ? `Running · ${status.url}` : 'Stopped';
   startPreviewButton.disabled = status.running;
+  restartPreviewButton.disabled = !status.running;
   stopPreviewButton.disabled = !status.running;
 }
 
 async function previewAction(action) {
   try {
+    livePreviewStatus.textContent = `${action[0].toUpperCase()}${action.slice(1)}ing…`;
     const status = await api(`/preview/${action}`, { method: 'POST' });
     setLivePreviewStatus(status);
-    if (action === 'start' && status.url) preview(status.url);
+    if ((action === 'start' || action === 'restart') && status.url) preview(status.url);
   } catch (error) {
     livePreviewStatus.textContent = error.message;
   }
@@ -173,36 +200,71 @@ function connectLiveEvents() {
   eventSource = new EventSource(`${API_URL}/events?token=${token}`);
   eventSource.addEventListener('connected', (event) => setLivePreviewStatus(JSON.parse(event.data).preview));
   eventSource.addEventListener('preview-status', (event) => setLivePreviewStatus(JSON.parse(event.data)));
-  eventSource.addEventListener('file-change', () => {
-    if (currentUrl && !previewArea.classList.contains('collapsed')) {
-      const url = new URL(currentUrl);
-      url.searchParams.set('__live_reload', Date.now());
-      frame.src = url.href;
-    }
+  eventSource.addEventListener('file-change', reloadPreview);
+  eventSource.addEventListener('preview-log', (event) => {
+    const payload = JSON.parse(event.data);
+    setMessage(payload.text.trim() || 'Preview process update.');
   });
   eventSource.onerror = () => { livePreviewStatus.textContent = 'Live server disconnected'; };
 }
 
+async function refreshMcp() {
+  try {
+    const status = await api('/mcp/status');
+    localMcpUrl.value = status.endpoint;
+    mcpTransport.textContent = status.transport;
+    mcpTools.textContent = String(status.toolCount);
+    mcpAuth.textContent = status.authentication;
+    mcpStatus.textContent = status.ready ? 'MCP server ready' : 'MCP auth not configured';
+    mcpStatus.classList.toggle('offline', !status.ready);
+    mcpOutput.textContent = status.ready
+      ? `Local MCP endpoint is ready.\n\nFor ChatGPT Web, expose port 4783 through HTTPS and register the tunnel URL ending in /mcp.`
+      : 'Set MCP_TOKEN, or temporarily enable ALLOW_UNAUTHENTICATED_MCP for isolated developer-mode testing.';
+  } catch (error) {
+    mcpStatus.textContent = 'Server offline or token invalid';
+    mcpStatus.classList.add('offline');
+    mcpOutput.textContent = error.message;
+  }
+}
+
+async function copyValue(inputElement, button) {
+  const value = inputElement.value.trim();
+  if (!value) return;
+  await navigator.clipboard.writeText(value);
+  const previous = button.textContent;
+  button.textContent = 'Copied';
+  setTimeout(() => { button.textContent = previous; }, 1_200);
+}
+
 startPreviewButton.addEventListener('click', () => previewAction('start'));
+restartPreviewButton.addEventListener('click', () => previewAction('restart'));
 stopPreviewButton.addEventListener('click', () => previewAction('stop'));
+refreshGitButton.addEventListener('click', refreshGit);
+refreshMcpButton.addEventListener('click', refreshMcp);
+copyLocalMcpButton.addEventListener('click', () => copyValue(localMcpUrl, copyLocalMcpButton));
+copyTunnelMcpButton.addEventListener('click', () => copyValue(tunnelMcpUrl, copyTunnelMcpButton));
 
 serverToken.addEventListener('change', async () => {
   await chrome.storage.local.set({ serverToken: serverToken.value.trim() });
   connectLiveEvents();
-  refreshGit();
+  await Promise.allSettled([refreshGit(), refreshMcp()]);
 });
-refreshGitButton.addEventListener('click', refreshGit);
+
+tunnelMcpUrl.addEventListener('change', async () => {
+  await chrome.storage.local.set({ tunnelMcpUrl: tunnelMcpUrl.value.trim() });
+});
+
 pullButton.addEventListener('click', () => runGitAction('/git/pull'));
 pushButton.addEventListener('click', () => runGitAction('/git/push'));
 commitButton.addEventListener('click', () => {
-  const message = commitMessage.value.trim();
-  if (!message) return showGitOutput('Enter a commit message.');
-  runGitAction('/git/commit', { message });
+  const commit = commitMessage.value.trim();
+  if (!commit) return showGitOutput('Enter a commit message.');
+  runGitAction('/git/commit', { message: commit }).then(() => { commitMessage.value = ''; });
 });
 autoSyncToggle.addEventListener('change', async () => {
   try {
-    const settings = await api('/settings', { method: 'PUT', body: JSON.stringify({ autoSync: autoSyncToggle.checked }) });
-    showGitOutput(`Auto sync ${settings.autoSync ? 'enabled' : 'disabled'}.`);
+    const updated = await api('/settings', { method: 'PUT', body: JSON.stringify({ autoSync: autoSyncToggle.checked }) });
+    showGitOutput(`Auto sync ${updated.autoSync ? 'enabled' : 'disabled'}.`);
   } catch (error) {
     autoSyncToggle.checked = false;
     showGitOutput(error.message);
@@ -210,10 +272,16 @@ autoSyncToggle.addEventListener('change', async () => {
 });
 
 (async () => {
-  const saved = await chrome.storage.local.get(['lastUrl', 'collapsed', 'serverToken', 'activeView']);
+  const saved = await chrome.storage.local.get(['lastUrl', 'collapsed', 'serverToken', 'activeView', 'tunnelMcpUrl']);
   serverToken.value = saved.serverToken || '';
+  tunnelMcpUrl.value = saved.tunnelMcpUrl || '';
+  if (saved.collapsed) {
+    previewArea.classList.add('collapsed');
+    collapseButton.textContent = '+';
+    collapseButton.title = 'Expand preview';
+    collapseButton.setAttribute('aria-expanded', 'false');
+  }
   connectLiveEvents();
-  if (saved.collapsed) collapseButton.click();
   if (saved.lastUrl) preview(saved.lastUrl);
   await selectView(saved.activeView || 'preview', false);
 })();
