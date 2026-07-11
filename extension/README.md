@@ -27,3 +27,9 @@ A Chrome Manifest V3 extension for previewing web URLs in Chrome's right-side pa
 The Git panel supports status, manual pull, commit, push, and auto sync. Auto sync is off by default and only runs when the working tree is clean. Pull uses `--ff-only` to avoid automatic merge commits.
 
 The side panel has persistent **Preview** and **Git** tabs. It remembers the selected tab, last preview URL, collapsed preview state, server token, and server-side auto-sync preference.
+
+## ChatGPT Web and MCP
+
+The server exposes `http://127.0.0.1:4783/mcp` with tools for project files, Git, and the preview process. ChatGPT Web requires HTTPS, so use OpenAI Secure MCP Tunnel, ngrok, or Cloudflare Tunnel and register the resulting `/mcp` URL in ChatGPT Developer Mode.
+
+The extension listens to `/api/events` using Server-Sent Events. Project file changes automatically refresh the preview iframe. Configure `PROJECT_PATH`, `PREVIEW_COMMAND`, and `PREVIEW_URL` in `.env`.

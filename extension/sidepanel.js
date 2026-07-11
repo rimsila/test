@@ -18,6 +18,9 @@ const pushButton = document.getElementById('pushButton');
 const commitMessage = document.getElementById('commitMessage');
 const commitButton = document.getElementById('commitButton');
 const gitOutput = document.getElementById('gitOutput');
+const livePreviewStatus = document.getElementById('livePreviewStatus');
+const startPreviewButton = document.getElementById('startPreviewButton');
+const stopPreviewButton = document.getElementById('stopPreviewButton');
 const API_URL = 'http://127.0.0.1:4783/api';
 const previewTab = document.getElementById('previewTab');
 const gitTab = document.getElementById('gitTab');
@@ -25,6 +28,7 @@ const previewView = document.getElementById('previewView');
 const gitView = document.getElementById('gitView');
 
 let currentUrl = '';
+let eventSource = null;
 
 async function selectView(view, persist = true) {
   const showGit = view === 'git';
@@ -146,8 +150,45 @@ async function runGitAction(path, body) {
   }
 }
 
+function setLivePreviewStatus(status) {
+  livePreviewStatus.textContent = status.running ? `Running · ${status.url}` : 'Stopped';
+  startPreviewButton.disabled = status.running;
+  stopPreviewButton.disabled = !status.running;
+}
+
+async function previewAction(action) {
+  try {
+    const status = await api(`/preview/${action}`, { method: 'POST' });
+    setLivePreviewStatus(status);
+    if (action === 'start' && status.url) preview(status.url);
+  } catch (error) {
+    livePreviewStatus.textContent = error.message;
+  }
+}
+
+function connectLiveEvents() {
+  eventSource?.close();
+  const token = encodeURIComponent(serverToken.value.trim());
+  if (!token) return;
+  eventSource = new EventSource(`${API_URL}/events?token=${token}`);
+  eventSource.addEventListener('connected', (event) => setLivePreviewStatus(JSON.parse(event.data).preview));
+  eventSource.addEventListener('preview-status', (event) => setLivePreviewStatus(JSON.parse(event.data)));
+  eventSource.addEventListener('file-change', () => {
+    if (currentUrl && !previewArea.classList.contains('collapsed')) {
+      const url = new URL(currentUrl);
+      url.searchParams.set('__live_reload', Date.now());
+      frame.src = url.href;
+    }
+  });
+  eventSource.onerror = () => { livePreviewStatus.textContent = 'Live server disconnected'; };
+}
+
+startPreviewButton.addEventListener('click', () => previewAction('start'));
+stopPreviewButton.addEventListener('click', () => previewAction('stop'));
+
 serverToken.addEventListener('change', async () => {
   await chrome.storage.local.set({ serverToken: serverToken.value.trim() });
+  connectLiveEvents();
   refreshGit();
 });
 refreshGitButton.addEventListener('click', refreshGit);
@@ -171,6 +212,7 @@ autoSyncToggle.addEventListener('change', async () => {
 (async () => {
   const saved = await chrome.storage.local.get(['lastUrl', 'collapsed', 'serverToken', 'activeView']);
   serverToken.value = saved.serverToken || '';
+  connectLiveEvents();
   if (saved.collapsed) collapseButton.click();
   if (saved.lastUrl) preview(saved.lastUrl);
   await selectView(saved.activeView || 'preview', false);
