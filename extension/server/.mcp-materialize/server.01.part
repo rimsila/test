@@ -1,0 +1,134 @@
+import crypto, { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import express from 'express';
+import chokidar from 'chokidar';
+import { z } from 'zod';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+
+dotenv.config();
+
+const execFileAsync = promisify(execFile);
+const app = express();
+const PORT = toPositiveInt(process.env.PORT, 4783);
+const PREVIEW_PORT = toPositiveInt(process.env.PREVIEW_PORT, 5173);
+const REPO_PATH = path.resolve(process.env.REPO_PATH || '.');
+const PROJECT_PATH = path.resolve(process.env.PROJECT_PATH || REPO_PATH);
+const EXTENSION_TOKEN = String(process.env.EXTENSION_TOKEN || '');
+const MCP_TOKEN = String(process.env.MCP_TOKEN || '');
+const ALLOW_UNAUTHENTICATED_MCP = String(process.env.ALLOW_UNAUTHENTICATED_MCP || 'false').toLowerCase() === 'true';
+const PREVIEW_COMMAND = String(process.env.PREVIEW_COMMAND || '').trim();
+const PREVIEW_URL = String(process.env.PREVIEW_URL || `http://127.0.0.1:${PREVIEW_PORT}`);
+const SETTINGS_FILE = path.resolve(process.cwd(), 'settings.json');
+const AUTO_SYNC_INTERVAL_MS = Math.max(1, Number(process.env.AUTO_SYNC_INTERVAL_MINUTES || 5)) * 60_000;
+const MAX_FILE_BYTES = Math.max(16_384, Number(process.env.MAX_FILE_BYTES || 1_048_576));
+const MAX_READ_BYTES = Math.max(4_096, Number(process.env.MAX_READ_BYTES || 262_144));
+const MAX_TOOL_OUTPUT_CHARS = Math.max(8_192, Number(process.env.MAX_TOOL_OUTPUT_CHARS || 200_000));
+const MCP_TOOL_COUNT = 13;
+
+let settings = { autoSync: false };
+let syncRunning = false;
+let gitQueue = Promise.resolve();
+let previewProcess = null;
+let previewServer = null;
+let previewStartedAt = null;
+let shuttingDown = false;
+const eventClients = new Set();
+
+function toPositiveInt(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function timingSafeTokenEqual(expected, supplied) {
+  if (!expected || !supplied || expected.length !== supplied.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(supplied));
+}
+
+function clip(value, max = MAX_TOOL_OUTPUT_CHARS) {
+  const text = String(value ?? '');
+  return text.length <= max ? text : `${text.slice(0, max)}\n… output truncated (${text.length - max} more characters)`;
+}
+
+function jsonResult(value, isError = false) {
+  return {
+    isError,
+    content: [{ type: 'text', text: clip(JSON.stringify(value, null, 2)) }],
+  };
+}
+
+function errorResult(error) {
+  return jsonResult({ error: error?.message || String(error) }, true);
+}
+
+function createHttpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function formatGitError(error) {
+  const details = `${error?.stderr || ''}\n${error?.stdout || ''}\n${error?.message || ''}`.trim();
+  if (details.includes('not a git repository')) {
+    return createHttpError(400, `REPO_PATH is not a Git repository: ${REPO_PATH}`);
+  }
+  if (details.includes('ENOENT') || details.includes('no such file or directory')) {
+    return createHttpError(400, `REPO_PATH does not exist or is not accessible: ${REPO_PATH}`);
+  }
+  error.message = clip(error?.stderr?.trim() || error?.stdout?.trim() || error?.message || 'Git operation failed.');
+  return error;
+}
+
+function runSerializedGit(task) {
+  const next = gitQueue.then(task, task);
+  gitQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function git(args, { timeout = 120_000 } = {}) {
+  return runSerializedGit(async () => {
+    try {
+      const { stdout, stderr } = await execFileAsync('git', args, {
+        cwd: REPO_PATH,
+        windowsHide: true,
+        timeout,
+        maxBuffer: 4 * 1024 * 1024,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      });
+      return clip(`${stdout}${stderr}`.trim());
+    } catch (error) {
+      throw formatGitError(error);
+    }
+  });
+}
+
+async function gitStatus() {
+  const output = await git(['status', '--porcelain=v2', '--branch']);
+  const branch = output.match(/^# branch\.head (.+)$/m)?.[1] || '';
+  const upstream = output.match(/^# branch\.upstream (.+)$/m)?.[1] || '';
+  const aheadBehind = output.match(/^# branch\.ab \+(\d+) -(\d+)$/m);
+  const changes = output.split('\n').filter((line) => /^[12?u] /.test(line));
+  return {
+    branch,
+    upstream,
+    ahead: Number(aheadBehind?.[1] || 0),
+    behind: Number(aheadBehind?.[2] || 0),
+    changedFiles: changes.length,
+    clean: changes.length === 0,
+    summary: changes.join('\n'),
+  };
+}
+
+async function loadSettings() {
+  try {
+    settings = { autoSync: false, ...JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8')) };
+  } catch {
+    settings = { autoSync: false };
+    await saveSettings();
+  }
+}

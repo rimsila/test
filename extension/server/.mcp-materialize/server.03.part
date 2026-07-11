@@ -1,0 +1,198 @@
+  server.registerTool('project_info', {
+    title: 'Project information',
+    description: 'Return the configured project, repository, preview, and safety limits.',
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async () => jsonResult({
+    projectPath: PROJECT_PATH,
+    repoPath: REPO_PATH,
+    preview: previewStatus(),
+    limits: { maxFileBytes: MAX_FILE_BYTES, maxReadBytes: MAX_READ_BYTES },
+  }));
+
+  server.registerTool('list_files', {
+    title: 'List project files',
+    description: 'List files and directories inside PROJECT_PATH. Sensitive paths are omitted.',
+    inputSchema: {
+      path: z.string().default('.').describe('Project-relative directory path.'),
+      depth: z.number().int().min(0).max(20).default(4),
+      limit: z.number().int().min(1).max(1000).default(300),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async ({ path: relativePath, depth, limit }) => {
+    try { return jsonResult(await listProjectFiles(relativePath, depth, limit)); } catch (error) { return errorResult(error); }
+  });
+
+  server.registerTool('read_file', {
+    title: 'Read project file',
+    description: 'Read a UTF-8 text file from PROJECT_PATH and return its SHA-256 for safe subsequent edits.',
+    inputSchema: { path: z.string().min(1) },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async ({ path: relativePath }) => {
+    try { return jsonResult(await readTextFile(relativePath)); } catch (error) { return errorResult(error); }
+  });
+
+  server.registerTool('write_file', {
+    title: 'Write project file',
+    description: 'Create or atomically overwrite a UTF-8 project file. Optionally require an expected SHA-256 to prevent stale writes.',
+    inputSchema: {
+      path: z.string().min(1),
+      content: z.string(),
+      overwrite: z.boolean().default(true),
+      expectedSha256: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  }, async ({ path: relativePath, content, overwrite, expectedSha256 }) => {
+    try { return jsonResult(await writeTextFile(relativePath, content, { overwrite, expectedSha256 })); } catch (error) { return errorResult(error); }
+  });
+
+  server.registerTool('replace_in_file', {
+    title: 'Replace text in project file',
+    description: 'Replace exact text in a UTF-8 project file, with optional replace-all and SHA-256 concurrency protection.',
+    inputSchema: {
+      path: z.string().min(1),
+      search: z.string().min(1),
+      replacement: z.string(),
+      replaceAll: z.boolean().default(false),
+      expectedSha256: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  }, async ({ path: relativePath, search, replacement, replaceAll, expectedSha256 }) => {
+    try {
+      const file = await readTextFile(relativePath);
+      if (expectedSha256 && expectedSha256 !== file.sha256) throw createHttpError(409, 'File changed since it was read.');
+      const occurrences = file.content.split(search).length - 1;
+      if (occurrences === 0) throw createHttpError(404, 'Search text was not found.');
+      const content = replaceAll ? file.content.split(search).join(replacement) : file.content.replace(search, replacement);
+      const written = await writeTextFile(relativePath, content, { overwrite: true, expectedSha256: file.sha256 });
+      return jsonResult({ ...written, replacements: replaceAll ? occurrences : 1 });
+    } catch (error) { return errorResult(error); }
+  });
+
+  server.registerTool('search_files', {
+    title: 'Search project text',
+    description: 'Search UTF-8 project files for case-insensitive text.',
+    inputSchema: {
+      query: z.string().min(1),
+      fileSuffix: z.string().default('').describe('Optional suffix such as .js or .html.'),
+      maxResults: z.number().int().min(1).max(200).default(50),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async ({ query, fileSuffix, maxResults }) => {
+    try { return jsonResult(await searchProject(query, fileSuffix, maxResults)); } catch (error) { return errorResult(error); }
+  });
+
+  server.registerTool('delete_path', {
+    title: 'Delete project path',
+    description: 'Delete one project file or directory recursively. The root and sensitive paths are blocked.',
+    inputSchema: { path: z.string().min(1), recursive: z.boolean().default(false) },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  }, async ({ path: relativePath, recursive }) => {
+    try {
+      const safe = await resolveProjectPath(relativePath);
+      const stat = await fs.lstat(safe.absolute);
+      if (stat.isDirectory() && !recursive) throw createHttpError(400, 'Set recursive=true to delete a directory.');
+      await fs.rm(safe.absolute, { recursive, force: false });
+      broadcast('file-change', { event: 'delete', path: safe.relative, at: new Date().toISOString() });
+      return jsonResult({ deleted: safe.relative });
+    } catch (error) { return errorResult(error); }
+  });
+
+  server.registerTool('git_status', {
+    title: 'Git status',
+    description: 'Return branch, tracking, and working-tree status.',
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async () => { try { return jsonResult(await gitStatus()); } catch (error) { return errorResult(error); } });
+
+  server.registerTool('git_diff', {
+    title: 'Git diff',
+    description: 'Return the current Git diff, optionally staged and optionally for one project-relative path.',
+    inputSchema: { staged: z.boolean().default(false), path: z.string().optional() },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async ({ staged, path: relativePath }) => {
+    try {
+      const args = ['diff'];
+      if (staged) args.push('--cached');
+      if (relativePath) {
+        const safe = await resolveProjectPath(relativePath, { allowMissing: true });
+        args.push('--', safe.relative);
+      }
+      return jsonResult({ diff: await git(args) });
+    } catch (error) { return errorResult(error); }
+  });
+
+  server.registerTool('git_pull', {
+    title: 'Git pull',
+    description: 'Pull the configured repository using fast-forward only.',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async () => { try { return jsonResult({ output: await git(['pull', '--ff-only']) }); } catch (error) { return errorResult(error); } });
+
+  server.registerTool('git_commit', {
+    title: 'Git commit',
+    description: 'Stage all changes and create a local Git commit.',
+    inputSchema: { message: z.string().min(1).max(200) },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  }, async ({ message }) => {
+    try {
+      await git(['add', '--all']);
+      return jsonResult({ output: await git(['commit', '-m', message.trim()]) });
+    } catch (error) { return errorResult(error); }
+  });
+
+  server.registerTool('git_push', {
+    title: 'Git push',
+    description: 'Push committed changes to the configured upstream repository.',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async () => { try { return jsonResult({ output: await git(['push']) }); } catch (error) { return errorResult(error); } });
+
+  server.registerTool('preview_control', {
+    title: 'Preview control',
+    description: 'Get status or start, stop, or restart the local preview server.',
+    inputSchema: { action: z.enum(['status', 'start', 'stop', 'restart']).default('status') },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ action }) => { try { return jsonResult(await controlPreview(action)); } catch (error) { return errorResult(error); } });
+
+  return server;
+}
+
+function extensionAuth(req, res, next) {
+  if (!EXTENSION_TOKEN) return res.status(503).json({ error: 'EXTENSION_TOKEN is not configured.' });
+  const supplied = req.get('X-Extension-Token') || req.query.token || '';
+  if (!timingSafeTokenEqual(EXTENSION_TOKEN, String(supplied))) return res.status(401).json({ error: 'Invalid server token.' });
+  next();
+}
+
+function mcpAuth(req, res, next) {
+  if (ALLOW_UNAUTHENTICATED_MCP) return next();
+  if (!MCP_TOKEN) return res.status(503).json({ error: 'MCP authentication is required. Set MCP_TOKEN or ALLOW_UNAUTHENTICATED_MCP=true.' });
+  const authorization = req.get('Authorization') || '';
+  const supplied = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  if (!timingSafeTokenEqual(MCP_TOKEN, supplied)) return res.status(401).json({ error: 'Invalid MCP bearer token.' });
+  next();
+}
+
+function validateOrigin(req, res, next) {
+  const origin = req.get('Origin');
+  if (!origin) return next();
+  const configured = String(process.env.ALLOWED_ORIGINS || '').split(',').map((value) => value.trim()).filter(Boolean);
+  const allowed = configured.includes(origin)
+    || /^chrome-extension:\/\/[a-p]{32}$/i.test(origin)
+    || /^https:\/\/([a-z0-9-]+\.)?(chatgpt\.com|openai\.com)$/i.test(origin)
+    || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin);
+  if (!allowed) return res.status(403).json({ error: `Origin is not allowed: ${origin}` });
+  next();
+}
+
+app.disable('x-powered-by');
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || /^chrome-extension:\/\//i.test(origin) || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin)) return callback(null, true);
+    callback(null, false);
+  },
+}));
+app.use(express.json({ limit: `${Math.ceil(MAX_FILE_BYTES / 1024) + 256}kb` }));
+app.use(validateOrigin);
+
+app.get('/', (_req, res) => res.json({
+  name: 'todo-local-dev',
+  version: '1.1.0',
+  api: `http://127.0.0.1:${PORT}/api`,

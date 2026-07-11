@@ -1,0 +1,52 @@
+name: Materialize MCP server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extension/server/.mcp-materialize/**'
+      - '.github/workflows/materialize-mcp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble readable source parts
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib
+
+          root = Path('extension/server')
+          parts = sorted((root / '.mcp-materialize').glob('server.*.part'))
+          if len(parts) != 4:
+              raise SystemExit(f'Expected 4 server parts, found {len(parts)}')
+
+          data = parts[0].read_bytes() + b'\n' + b''.join(part.read_bytes() for part in parts[1:])
+          digest = hashlib.sha256(data).hexdigest()
+          expected = 'ba3184fe107981113b812f88c906df489d8831e0e52964290b2c5c7528d49f36'
+          if digest != expected:
+              raise SystemExit(f'Server checksum mismatch: {digest}')
+
+          target = root / 'src/server.js'
+          target.parent.mkdir(parents=True, exist_ok=True)
+          target.write_bytes(data)
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check extension/server/src/server.js
+          node --check extension/server/scripts/smoke-test.js
+
+      - name: Commit materialized source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extension/server/src/server.js extension/server/scripts/smoke-test.js
+          git rm -r extension/server/.mcp-materialize .github/workflows/materialize-mcp.yml
+          git commit -m "feat: materialize production MCP server"
+          git push

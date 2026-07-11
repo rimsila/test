@@ -1,0 +1,127 @@
+  mcp: `http://127.0.0.1:${PORT}/mcp`,
+  preview: previewStatus(),
+}));
+
+app.use('/api', extensionAuth);
+app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.1.0', preview: previewStatus() }));
+app.get('/api/settings', (_req, res) => res.json(settings));
+app.put('/api/settings', async (req, res, next) => {
+  try {
+    settings.autoSync = req.body.autoSync === true;
+    await saveSettings();
+    res.json(settings);
+  } catch (error) { next(error); }
+});
+app.get('/api/git/status', async (_req, res, next) => { try { res.json(await gitStatus()); } catch (error) { next(error); } });
+app.post('/api/git/pull', async (_req, res, next) => { try { res.json({ output: await git(['pull', '--ff-only']) }); } catch (error) { next(error); } });
+app.post('/api/git/push', async (_req, res, next) => { try { res.json({ output: await git(['push']) }); } catch (error) { next(error); } });
+app.post('/api/git/commit', async (req, res, next) => {
+  try {
+    const message = String(req.body.message || '').trim();
+    if (!message || message.length > 200) throw createHttpError(400, 'Commit message must be 1–200 characters.');
+    await git(['add', '--all']);
+    res.json({ output: await git(['commit', '-m', message]) });
+  } catch (error) { next(error); }
+});
+app.get('/api/preview/status', (_req, res) => res.json(previewStatus()));
+app.post('/api/preview/:action', async (req, res, next) => { try { res.json(await controlPreview(req.params.action)); } catch (error) { next(error); } });
+app.get('/api/mcp/status', (_req, res) => res.json({
+  endpoint: `http://127.0.0.1:${PORT}/mcp`,
+  transport: 'Streamable HTTP',
+  toolCount: MCP_TOOL_COUNT,
+  authentication: ALLOW_UNAUTHENTICATED_MCP ? 'none' : MCP_TOKEN ? 'bearer' : 'not configured',
+  ready: ALLOW_UNAUTHENTICATED_MCP || Boolean(MCP_TOKEN),
+}));
+app.get('/api/events', (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  });
+  res.flushHeaders();
+  eventClients.add(res);
+  res.write(`event: connected\ndata: ${JSON.stringify({ preview: previewStatus() })}\n\n`);
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 20_000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    eventClients.delete(res);
+  });
+});
+
+app.options('/mcp', (_req, res) => res.sendStatus(204));
+app.post('/mcp', mcpAuth, async (req, res) => {
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  res.on('close', () => {
+    transport.close().catch(() => undefined);
+    server.close().catch(() => undefined);
+  });
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('MCP request failed:', error);
+    if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null });
+  }
+});
+app.get('/mcp', mcpAuth, (_req, res) => res.status(405).set('Allow', 'POST, OPTIONS').json({ error: 'This server uses stateless Streamable HTTP. Send MCP messages with POST.' }));
+app.delete('/mcp', mcpAuth, (_req, res) => res.status(405).set('Allow', 'POST, OPTIONS').json({ error: 'Stateless sessions do not support DELETE.' }));
+
+app.use((error, _req, res, _next) => {
+  const status = error.statusCode || 500;
+  if (status >= 500) console.error(error);
+  else console.warn(error.message);
+  res.status(status).json({ error: error.message || 'Operation failed.' });
+});
+
+async function autoSync() {
+  if (!settings.autoSync || syncRunning) return;
+  syncRunning = true;
+  try {
+    const status = await gitStatus();
+    if (!status.clean) return;
+    await git(['pull', '--ff-only']);
+    await git(['push']);
+  } catch (error) {
+    console.error('Auto sync failed:', error.message);
+  } finally {
+    syncRunning = false;
+  }
+}
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${signal}: shutting down…`);
+  await stopPreview().catch(() => undefined);
+  await watcher.close().catch(() => undefined);
+  process.exit(0);
+}
+
+await loadSettings();
+const watcher = chokidar.watch(PROJECT_PATH, {
+  ignoreInitial: true,
+  ignored: [/(^|[\\/])\.git([\\/]|$)/, /(^|[\\/])node_modules([\\/]|$)/],
+  awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 },
+});
+let changeTimer = null;
+watcher.on('all', (event, changedPath) => {
+  clearTimeout(changeTimer);
+  changeTimer = setTimeout(() => {
+    const relative = path.relative(PROJECT_PATH, changedPath).replaceAll('\\', '/');
+    if (!isSensitiveRelativePath(relative)) broadcast('file-change', { event, path: relative, at: new Date().toISOString() });
+  }, 80);
+});
+
+setInterval(autoSync, AUTO_SYNC_INTERVAL_MS).unref();
+setInterval(() => broadcast('heartbeat', { at: new Date().toISOString() }), 25_000).unref();
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`Developer server: http://127.0.0.1:${PORT}`);
+  console.log(`MCP endpoint:    http://127.0.0.1:${PORT}/mcp`);
+  console.log(`Project:         ${PROJECT_PATH}`);
+  console.log(`Repository:      ${REPO_PATH}`);
+  console.log(`MCP auth:        ${ALLOW_UNAUTHENTICATED_MCP ? 'disabled (development only)' : MCP_TOKEN ? 'Bearer token' : 'NOT CONFIGURED'}`);
+});
