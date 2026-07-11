@@ -98,36 +98,83 @@
     <section class="git-panel mcp-panel" aria-labelledby="mcpTitle">
       <div class="section-heading">
         <div>
-          <h2 id="mcpTitle">ChatGPT MCP</h2>
-          <p id="mcpStatus" class="connection-status offline">Not checked</p>
+          <h2 id="mcpTitle">MCP server details</h2>
+          <p id="mcpStatus" class="connection-status offline" aria-live="polite">Not checked</p>
         </div>
-        <button id="refreshMcpButton" class="small-button" type="button">Check</button>
+        <button id="refreshMcpButton" class="small-button" type="button">Refresh all</button>
       </div>
 
-      <dl class="mcp-stats">
+      <dl class="mcp-summary" aria-label="MCP summary">
+        <div><dt>Server</dt><dd id="mcpVersion">—</dd></div>
         <div><dt>Transport</dt><dd id="mcpTransport">—</dd></div>
         <div><dt>Tools</dt><dd id="mcpTools">—</dd></div>
-        <div><dt>Auth</dt><dd id="mcpAuth">—</dd></div>
+        <div><dt>Authentication</dt><dd id="mcpAuth">—</dd></div>
+        <div><dt>Preview</dt><dd id="mcpPreview">—</dd></div>
+        <div><dt>Auto sync</dt><dd id="mcpAutoSync">—</dd></div>
       </dl>
 
-      <label class="field-label" for="localMcpUrl">Local endpoint</label>
-      <div class="copy-row">
-        <input id="localMcpUrl" type="text" readonly value="http://127.0.0.1:4783/mcp" />
-        <button id="copyLocalMcpButton" class="small-button" type="button">Copy</button>
+      <section class="detail-card" aria-labelledby="mcpConnectionTitle">
+        <div class="card-heading">
+          <div>
+            <h3 id="mcpConnectionTitle">Connection endpoints</h3>
+            <p>Use the local URL for testing and the HTTPS tunnel URL for ChatGPT Developer Mode.</p>
+          </div>
+        </div>
+
+        <label class="field-label" for="localMcpUrl">Local endpoint</label>
+        <div class="copy-row">
+          <input id="localMcpUrl" type="text" readonly value="http://127.0.0.1:4783/mcp" />
+          <button id="copyLocalMcpButton" class="small-button" type="button">Copy</button>
+        </div>
+
+        <label class="field-label" for="tunnelMcpUrl">HTTPS tunnel endpoint</label>
+        <div class="copy-row">
+          <input id="tunnelMcpUrl" type="url" placeholder="https://your-tunnel.example/mcp" autocomplete="off" />
+          <button id="copyTunnelMcpButton" class="small-button" type="button">Copy</button>
+        </div>
+
+        <div class="action-row">
+          <button id="copyMcpConfigButton" class="small-button" type="button">Copy ChatGPT config</button>
+        </div>
+        <pre id="mcpConfigPreview" class="config-preview">Refresh to generate connection configuration.</pre>
+      </section>
+
+      <div class="mcp-detail-grid">
+        <section class="detail-card" aria-labelledby="runtimeTitle">
+          <h3 id="runtimeTitle">Runtime</h3>
+          <dl class="detail-list">
+            <div><dt>API endpoint</dt><dd id="mcpApiEndpoint">—</dd></div>
+            <div><dt>Git branch</dt><dd id="mcpBranch">—</dd></div>
+            <div><dt>Working changes</dt><dd id="mcpChanges">—</dd></div>
+            <div><dt>Ahead / behind</dt><dd id="mcpTracking">—</dd></div>
+            <div><dt>Preview mode</dt><dd id="mcpPreviewMode">—</dd></div>
+            <div><dt>Preview URL</dt><dd id="mcpPreviewUrl">—</dd></div>
+            <div><dt>Preview started</dt><dd id="mcpPreviewStarted">—</dd></div>
+            <div><dt>Last checked</dt><dd id="mcpLastChecked">—</dd></div>
+          </dl>
+        </section>
+
+        <section class="detail-card" aria-labelledby="checklistTitle">
+          <h3 id="checklistTitle">Connection checklist</h3>
+          <ul id="mcpChecklist" class="checklist" aria-live="polite"></ul>
+        </section>
       </div>
 
-      <label class="field-label" for="tunnelMcpUrl">HTTPS tunnel endpoint</label>
-      <div class="copy-row">
-        <input id="tunnelMcpUrl" type="url" placeholder="https://your-tunnel.example/mcp" autocomplete="off" />
-        <button id="copyTunnelMcpButton" class="small-button" type="button">Copy</button>
-      </div>
+      <section class="detail-card" aria-labelledby="toolsTitle">
+        <div class="card-heading">
+          <div>
+            <h3 id="toolsTitle">Available MCP tools</h3>
+            <p>Read, edit, Git, and preview operations exposed to an MCP client.</p>
+          </div>
+          <span id="mcpToolCountBadge" class="count-badge">13</span>
+        </div>
+        <ul id="mcpToolList" class="tool-list"></ul>
+      </section>
 
-      <div class="notice-card">
-        <strong>Connection flow</strong>
-        <p>Run the local server, expose port 4783 through a private HTTPS tunnel, then add the tunnel’s <code>/mcp</code> URL in ChatGPT Developer Mode.</p>
-      </div>
-
-      <pre id="mcpOutput" class="git-output">Use Check to verify the local MCP server.</pre>
+      <details class="raw-details">
+        <summary>Raw diagnostics</summary>
+        <pre id="mcpOutput" class="git-output">Use Refresh all to inspect the local MCP server.</pre>
+      </details>
     </section>
   </section>
 
