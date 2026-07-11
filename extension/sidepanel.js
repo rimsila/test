@@ -9,6 +9,8 @@ const collapseButton = $('collapseButton');
 const currentTabButton = $('currentTabButton');
 const openTabButton = $('openTabButton');
 const serverToken = $('serverToken');
+const saveServerTokenButton = $('saveServerTokenButton');
+const serverTokenStatus = $('serverTokenStatus');
 const serverStatus = $('serverStatus');
 const gitBranch = $('gitBranch');
 const gitChanges = $('gitChanges');
@@ -45,6 +47,7 @@ const views = {
 let currentUrl = '';
 let eventSource = null;
 let reloadTimer = null;
+let currentAuthToken = '';
 
 async function selectView(view, persist = true) {
   const selected = views[view] ? view : 'preview';
@@ -133,7 +136,7 @@ openTabButton.addEventListener('click', () => {
 });
 
 async function api(path, options = {}) {
-  const token = serverToken.value.trim();
+  const token = currentAuthToken;
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: { 'Content-Type': 'application/json', 'X-Extension-Token': token, ...(options.headers || {}) },
@@ -141,6 +144,38 @@ async function api(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
   return data;
+}
+
+async function publicApi(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+  return data;
+}
+
+function setServerTokenStatus(text, isError = false) {
+  serverTokenStatus.textContent = text;
+  serverTokenStatus.classList.toggle('offline', isError);
+}
+
+function describeTokenConfig(config) {
+  if (!config.configured) return 'No server token is set yet. Enter one here and click Save.';
+  if (!currentAuthToken) return `Server token is configured from ${config.source}. Enter that token here and click Save to connect this side panel.`;
+  return `Connected with the ${config.source} server token.`;
+}
+
+async function refreshConfigStatus() {
+  try {
+    const config = await publicApi('/config');
+    setServerTokenStatus(describeTokenConfig(config));
+    return config;
+  } catch (error) {
+    setServerTokenStatus(error.message, true);
+    throw error;
+  }
 }
 
 function showGitOutput(value) {
@@ -195,7 +230,7 @@ async function previewAction(action) {
 
 function connectLiveEvents() {
   eventSource?.close();
-  const token = encodeURIComponent(serverToken.value.trim());
+  const token = encodeURIComponent(currentAuthToken);
   if (!token) return;
   eventSource = new EventSource(`${API_URL}/events?token=${token}`);
   eventSource.addEventListener('connected', (event) => setLivePreviewStatus(JSON.parse(event.data).preview));
@@ -244,11 +279,41 @@ refreshMcpButton.addEventListener('click', refreshMcp);
 copyLocalMcpButton.addEventListener('click', () => copyValue(localMcpUrl, copyLocalMcpButton));
 copyTunnelMcpButton.addEventListener('click', () => copyValue(tunnelMcpUrl, copyTunnelMcpButton));
 
-serverToken.addEventListener('change', async () => {
-  await chrome.storage.local.set({ serverToken: serverToken.value.trim() });
-  connectLiveEvents();
-  await Promise.allSettled([refreshGit(), refreshMcp()]);
+async function saveServerToken() {
+  const nextToken = serverToken.value.trim();
+  if (!nextToken) {
+    setServerTokenStatus('Enter a token before saving.', true);
+    return;
+  }
+
+  saveServerTokenButton.disabled = true;
+  setServerTokenStatus('Saving token…');
+  try {
+    await publicApi('/config', {
+      method: 'PUT',
+      headers: currentAuthToken || nextToken ? { 'X-Extension-Token': currentAuthToken || nextToken } : {},
+      body: JSON.stringify({ extensionToken: nextToken }),
+    });
+    currentAuthToken = nextToken;
+    await chrome.storage.local.set({ serverToken: currentAuthToken });
+    connectLiveEvents();
+    await Promise.allSettled([refreshConfigStatus(), refreshGit(), refreshMcp()]);
+    setServerTokenStatus('Server token saved. This side panel is now using it.');
+  } catch (error) {
+    setServerTokenStatus(error.message, true);
+  } finally {
+    saveServerTokenButton.disabled = false;
+  }
+}
+
+serverToken.addEventListener('input', () => {
+  if (serverToken.value.trim() === currentAuthToken) {
+    setServerTokenStatus('Saved token loaded.');
+    return;
+  }
+  setServerTokenStatus('Unsaved token change. Click Save to update the server.');
 });
+saveServerTokenButton.addEventListener('click', saveServerToken);
 
 tunnelMcpUrl.addEventListener('change', async () => {
   await chrome.storage.local.set({ tunnelMcpUrl: tunnelMcpUrl.value.trim() });
@@ -273,7 +338,8 @@ autoSyncToggle.addEventListener('change', async () => {
 
 (async () => {
   const saved = await chrome.storage.local.get(['lastUrl', 'collapsed', 'serverToken', 'activeView', 'tunnelMcpUrl']);
-  serverToken.value = saved.serverToken || '';
+  currentAuthToken = saved.serverToken || '';
+  serverToken.value = currentAuthToken;
   tunnelMcpUrl.value = saved.tunnelMcpUrl || '';
   if (saved.collapsed) {
     previewArea.classList.add('collapsed');
@@ -281,6 +347,7 @@ autoSyncToggle.addEventListener('change', async () => {
     collapseButton.title = 'Expand preview';
     collapseButton.setAttribute('aria-expanded', 'false');
   }
+  await refreshConfigStatus().catch(() => undefined);
   connectLiveEvents();
   if (saved.lastUrl) preview(saved.lastUrl);
   await selectView(saved.activeView || 'preview', false);

@@ -19,19 +19,19 @@ const PORT = toPositiveInt(process.env.PORT, 4783);
 const PREVIEW_PORT = toPositiveInt(process.env.PREVIEW_PORT, 5173);
 const REPO_PATH = path.resolve(process.env.REPO_PATH || '.');
 const PROJECT_PATH = path.resolve(process.env.PROJECT_PATH || REPO_PATH);
-const EXTENSION_TOKEN = String(process.env.EXTENSION_TOKEN || '');
+const ENV_EXTENSION_TOKEN = String(process.env.EXTENSION_TOKEN || '').trim();
 const MCP_TOKEN = String(process.env.MCP_TOKEN || '');
 const ALLOW_UNAUTHENTICATED_MCP = String(process.env.ALLOW_UNAUTHENTICATED_MCP || 'false').toLowerCase() === 'true';
 const PREVIEW_COMMAND = String(process.env.PREVIEW_COMMAND || '').trim();
 const PREVIEW_URL = String(process.env.PREVIEW_URL || `http://127.0.0.1:${PREVIEW_PORT}`);
-const SETTINGS_FILE = path.resolve(process.cwd(), 'settings.json');
+const SETTINGS_FILE = path.resolve(process.env.SETTINGS_FILE || path.join(process.cwd(), 'settings.json'));
 const AUTO_SYNC_INTERVAL_MS = Math.max(1, Number(process.env.AUTO_SYNC_INTERVAL_MINUTES || 5)) * 60_000;
 const MAX_FILE_BYTES = Math.max(16_384, Number(process.env.MAX_FILE_BYTES || 1_048_576));
 const MAX_READ_BYTES = Math.max(4_096, Number(process.env.MAX_READ_BYTES || 262_144));
 const MAX_TOOL_OUTPUT_CHARS = Math.max(8_192, Number(process.env.MAX_TOOL_OUTPUT_CHARS || 200_000));
 const MCP_TOOL_COUNT = 13;
 
-let settings = { autoSync: false };
+let settings = { autoSync: false, extensionToken: '' };
 let syncRunning = false;
 let gitQueue = Promise.resolve();
 let previewProcess = null;
@@ -48,6 +48,35 @@ function toPositiveInt(value, fallback) {
 function timingSafeTokenEqual(expected, supplied) {
   if (!expected || !supplied || expected.length !== supplied.length) return false;
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(supplied));
+}
+
+function normalizeSettings(value = {}) {
+  return {
+    autoSync: value.autoSync === true,
+    extensionToken: typeof value.extensionToken === 'string' ? value.extensionToken.trim() : '',
+  };
+}
+
+function activeExtensionToken() {
+  return settings.extensionToken || ENV_EXTENSION_TOKEN;
+}
+
+function extensionTokenSource() {
+  if (settings.extensionToken) return 'ui';
+  if (ENV_EXTENSION_TOKEN) return 'env';
+  return 'none';
+}
+
+function publicSettings() {
+  return { autoSync: settings.autoSync };
+}
+
+function extensionConfigStatus() {
+  const source = extensionTokenSource();
+  return {
+    configured: source !== 'none',
+    source,
+  };
 }
 
 function clip(value, max = MAX_TOOL_OUTPUT_CHARS) {
@@ -126,14 +155,15 @@ async function gitStatus() {
 
 async function loadSettings() {
   try {
-    settings = { autoSync: false, ...JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8')) };
+    settings = normalizeSettings(JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8')));
   } catch {
-    settings = { autoSync: false };
+    settings = normalizeSettings();
     await saveSettings();
   }
 }
 
 async function saveSettings() {
+  settings = normalizeSettings(settings);
   await fs.writeFile(SETTINGS_FILE, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 }
 
@@ -519,9 +549,10 @@ function createMcpServer() {
 }
 
 function extensionAuth(req, res, next) {
-  if (!EXTENSION_TOKEN) return res.status(503).json({ error: 'EXTENSION_TOKEN is not configured.' });
+  const expected = activeExtensionToken();
+  if (!expected) return res.status(503).json({ error: 'Extension token is not configured yet. Set it from the side panel first.' });
   const supplied = req.get('X-Extension-Token') || req.query.token || '';
-  if (!timingSafeTokenEqual(EXTENSION_TOKEN, String(supplied))) return res.status(401).json({ error: 'Invalid server token.' });
+  if (!timingSafeTokenEqual(expected, String(supplied))) return res.status(401).json({ error: 'Invalid server token.' });
   next();
 }
 
@@ -562,16 +593,36 @@ app.get('/', (_req, res) => res.json({
   api: `http://127.0.0.1:${PORT}/api`,
   mcp: `http://127.0.0.1:${PORT}/mcp`,
   preview: previewStatus(),
+  extensionAuth: extensionConfigStatus(),
 }));
+
+app.get('/api/config', (_req, res) => res.json(extensionConfigStatus()));
+app.put('/api/config', async (req, res, next) => {
+  try {
+    const nextToken = String(req.body.extensionToken || '').trim();
+    if (!nextToken) throw createHttpError(400, 'Extension token must not be empty.');
+    if (nextToken.length < 12) throw createHttpError(400, 'Extension token must be at least 12 characters.');
+
+    const currentToken = activeExtensionToken();
+    const supplied = String(req.get('X-Extension-Token') || req.query.token || '');
+    if (currentToken && !timingSafeTokenEqual(currentToken, supplied)) {
+      throw createHttpError(401, 'Current server token is required to update the extension token.');
+    }
+
+    settings.extensionToken = nextToken;
+    await saveSettings();
+    res.json(extensionConfigStatus());
+  } catch (error) { next(error); }
+});
 
 app.use('/api', extensionAuth);
 app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.1.0', preview: previewStatus() }));
-app.get('/api/settings', (_req, res) => res.json(settings));
+app.get('/api/settings', (_req, res) => res.json(publicSettings()));
 app.put('/api/settings', async (req, res, next) => {
   try {
     settings.autoSync = req.body.autoSync === true;
     await saveSettings();
-    res.json(settings);
+    res.json(publicSettings());
   } catch (error) { next(error); }
 });
 app.get('/api/git/status', async (_req, res, next) => { try { res.json(await gitStatus()); } catch (error) { next(error); } });
@@ -685,5 +736,6 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`MCP endpoint:    http://127.0.0.1:${PORT}/mcp`);
   console.log(`Project:         ${PROJECT_PATH}`);
   console.log(`Repository:      ${REPO_PATH}`);
+  console.log(`Extension auth:  ${extensionTokenSource() === 'ui' ? 'UI token' : extensionTokenSource() === 'env' ? '.env token' : 'NOT CONFIGURED'}`);
   console.log(`MCP auth:        ${ALLOW_UNAUTHENTICATED_MCP ? 'disabled (development only)' : MCP_TOKEN ? 'Bearer token' : 'NOT CONFIGURED'}`);
 });

@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "description": "Sync this todo project to Google Drive with Node.js.",
   "scripts": {
+    "dev": "npm --prefix extension/server run dev",
+    "install:all": "npm install && npm --prefix extension/server install",
     "sync:drive": "node sync-todo.js",
     "sync:drive:dry": "node sync-todo.js --dry-run"
   },

@@ -39,7 +39,7 @@ Edit `.env` first:
 
 - `REPO_PATH`: local Git repository controlled by the Git tab and Git MCP tools.
 - `PROJECT_PATH`: project exposed to preview and project-file MCP tools.
-- `EXTENSION_TOKEN`: long random token used only by the Chrome extension API.
+- `EXTENSION_TOKEN`: optional fallback token for the Chrome extension API. You can now set the active token from the side-panel UI instead.
 - `MCP_TOKEN`: optional Bearer token for MCP clients that support a static token.
 - `PREVIEW_COMMAND`: leave blank for the built-in static server, or set a development command such as `npm run dev -- --host 127.0.0.1`.
 - `PREVIEW_URL`: URL the extension should open after starting preview.
@@ -56,7 +56,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
 4. Select the `extension` folder.
-5. Open the side panel and paste `EXTENSION_TOKEN` into the Git tab.
+5. Open the side panel, enter a token in the Git tab, and click **Save** to configure the local server from the UI.
+6. If the server already has an `EXTENSION_TOKEN` in `.env`, enter that same token once and click **Save** so the UI can take over.
 
 The extension remembers the selected tab, token, last preview URL, collapsed state, and tunnel URL in `chrome.storage.local`.
 

@@ -23,7 +23,8 @@ const child = spawn(process.execPath, ['src/server.js'], {
     PREVIEW_PORT: String(previewPort),
     REPO_PATH: project,
     PROJECT_PATH: project,
-    EXTENSION_TOKEN: extensionToken,
+    SETTINGS_FILE: path.join(root, 'settings.json'),
+    EXTENSION_TOKEN: '',
     MCP_TOKEN: mcpToken,
     ALLOW_UNAUTHENTICATED_MCP: 'false',
     PREVIEW_COMMAND: '',
@@ -61,6 +62,19 @@ async function api(url, options = {}) {
   return body;
 }
 
+async function publicApi(url, options = {}) {
+  const response = await fetch(`http://127.0.0.1:${port}${url}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  const body = await response.json();
+  assert.equal(response.ok, true, JSON.stringify(body));
+  return body;
+}
+
 async function mcp(body, token = mcpToken) {
   const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
     method: 'POST',
@@ -77,6 +91,17 @@ async function mcp(body, token = mcpToken) {
 
 try {
   await waitForServer();
+
+  const initialConfig = await publicApi('/api/config');
+  assert.equal(initialConfig.configured, false);
+  assert.equal(initialConfig.source, 'none');
+
+  const configured = await publicApi('/api/config', {
+    method: 'PUT',
+    body: JSON.stringify({ extensionToken }),
+  });
+  assert.equal(configured.configured, true);
+  assert.equal(configured.source, 'ui');
 
   const health = await api('/api/health');
   assert.equal(health.ok, true);

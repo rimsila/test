@@ -68,7 +68,11 @@
       </div>
 
       <label class="field-label" for="serverToken">Extension server token</label>
-      <input id="serverToken" type="password" placeholder="Paste EXTENSION_TOKEN from server/.env" autocomplete="off" />
+      <div class="token-config-row">
+        <input id="serverToken" type="password" placeholder="Set or paste the server token" autocomplete="off" />
+        <button id="saveServerTokenButton" class="small-button" type="button">Save</button>
+      </div>
+      <p id="serverTokenStatus" class="field-help">Save a token here to configure the local server from the UI.</p>
 
       <dl class="git-stats">
         <div><dt>Branch</dt><dd id="gitBranch">—</dd></div>
