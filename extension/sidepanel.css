@@ -1,0 +1,131 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --text: #182033;
+  --muted: #697386;
+  --border: #dce1ea;
+  --primary: #2563eb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 280px;
+  min-height: 100vh;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 18px; padding: 4px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
+.tab { padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-weight: 700; }
+.tab.active { background: var(--primary); color: #fff; box-shadow: 0 3px 10px rgb(37 99 235 / 22%); }
+.tool-view { margin-top: 14px; }
+.tool-view[hidden] { display: none; }
+.view-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.view-heading h2 { margin: 0; font-size: 17px; }
+.view-heading p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h1 { margin: 0; font-size: 20px; }
+.header p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+
+button, input { font: inherit; }
+button { cursor: pointer; }
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 22px;
+}
+
+.url-form { margin-top: 18px; }
+.url-form label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 650; }
+.input-row { display: flex; gap: 8px; }
+
+input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+
+input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgb(37 99 235 / 15%); }
+
+.preview-button {
+  border: 0;
+  border-radius: 9px;
+  padding: 0 14px;
+  background: var(--primary);
+  color: white;
+  font-weight: 650;
+}
+
+.quick-actions { display: flex; gap: 8px; margin-top: 9px; }
+.quick-actions button {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.message { margin: 12px 0 8px; min-height: 18px; color: var(--muted); font-size: 12px; }
+.message.error { color: #c62828; }
+
+.preview-area {
+  height: 45vh;
+  min-height: 260px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: height 180ms ease, min-height 180ms ease, opacity 180ms ease;
+}
+
+.preview-area.collapsed { height: 0; min-height: 0; border-width: 0; opacity: 0; }
+
+iframe { display: block; width: 100%; height: 100%; border: 0; background: white; }
+
+.git-panel { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.section-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.section-heading h2 { margin: 0; font-size: 17px; }
+.connection-status { margin: 3px 0 0; font-size: 12px; color: #15803d; }
+.connection-status.offline { color: #c62828; }
+.small-button, .git-actions button, .commit-row button { border: 1px solid var(--border); border-radius: 8px; padding: 8px 11px; background: var(--surface); color: var(--text); }
+.field-label { display: block; margin: 14px 0 6px; font-size: 12px; font-weight: 650; }
+.git-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 12px 0; }
+.git-stats div { min-width: 0; padding: 8px; border-radius: 8px; background: var(--bg); }
+.git-stats dt { color: var(--muted); font-size: 10px; }
+.git-stats dd { overflow: hidden; margin: 3px 0 0; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.sync-toggle { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; }
+.sync-toggle span { display: grid; }
+.sync-toggle small { color: var(--muted); }
+.sync-toggle input { width: 18px; }
+.git-actions, .commit-row { display: flex; gap: 8px; margin-top: 8px; }
+.git-actions button { flex: 1; }
+.commit-row input { flex: 1; }
+.git-output { min-height: 54px; max-height: 150px; overflow: auto; margin: 10px 0 0; padding: 9px; border-radius: 8px; background: #0f172a; color: #d1fae5; font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap; }
+
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111827; --surface: #1f2937; --text: #f3f4f6; --muted: #9ca3af; --border: #374151; }
+}

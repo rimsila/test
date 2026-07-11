@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>URL Preview</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header class="header">
+    <div>
+      <h1>Developer Side Panel</h1>
+      <p>Preview pages and manage your local Git repository.</p>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Panel tools">
+    <button id="previewTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="previewView">Preview</button>
+    <button id="gitTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="gitView">Git</button>
+  </nav>
+
+  <section id="previewView" class="tool-view active" role="tabpanel" aria-labelledby="previewTab">
+    <div class="view-heading">
+      <div><h2>Website preview</h2><p>Browse a page beside your current tab.</p></div>
+      <button id="collapseButton" class="icon-button" type="button" aria-expanded="true" aria-controls="previewArea" title="Collapse preview">−</button>
+    </div>
+
+    <form id="urlForm" class="url-form">
+      <label for="urlInput">Website URL</label>
+      <div class="input-row">
+        <input id="urlInput" type="text" inputmode="url" placeholder="https://example.com" autocomplete="url" required />
+        <button class="preview-button" type="submit">Preview</button>
+      </div>
+    </form>
+
+    <div class="quick-actions">
+      <button id="currentTabButton" type="button">Use current tab</button>
+      <button id="openTabButton" type="button">Open in new tab</button>
+    </div>
+
+    <p id="message" class="message" role="status">Enter a URL to start.</p>
+
+    <main id="previewArea" class="preview-area">
+      <iframe id="previewFrame" title="Website preview"></iframe>
+    </main>
+  </section>
+
+  <section id="gitView" class="tool-view" role="tabpanel" aria-labelledby="gitTab" hidden>
+    <section class="git-panel" aria-labelledby="gitTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="gitTitle">Local Git</h2>
+          <p id="serverStatus" class="connection-status offline">Server offline</p>
+        </div>
+        <button id="refreshGitButton" class="small-button" type="button">Refresh</button>
+      </div>
+
+      <label class="field-label" for="serverToken">Server token</label>
+      <input id="serverToken" type="password" placeholder="Paste token from server/.env" autocomplete="off" />
+
+      <dl class="git-stats">
+        <div><dt>Branch</dt><dd id="gitBranch">—</dd></div>
+        <div><dt>Changes</dt><dd id="gitChanges">—</dd></div>
+        <div><dt>Ahead / behind</dt><dd id="gitTracking">—</dd></div>
+      </dl>
+
+      <label class="sync-toggle">
+        <span><strong>Auto sync</strong><small>Pull and push on an interval</small></span>
+        <input id="autoSyncToggle" type="checkbox" role="switch" />
+      </label>
+
+      <div class="git-actions">
+        <button id="pullButton" type="button">Pull</button>
+        <button id="pushButton" type="button">Push</button>
+      </div>
+
+      <div class="commit-row">
+        <input id="commitMessage" type="text" placeholder="Commit message" />
+        <button id="commitButton" type="button">Commit</button>
+      </div>
+      <pre id="gitOutput" class="git-output">Connect to the local server to manage Git.</pre>
+    </section>
+  </section>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

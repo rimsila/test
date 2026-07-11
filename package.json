@@ -1,0 +1,13 @@
+{
+  "name": "todo-drive-sync",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Sync this todo project to Google Drive with Node.js.",
+  "scripts": {
+    "sync:drive": "node sync-todo.js",
+    "sync:drive:dry": "node sync-todo.js --dry-run"
+  },
+  "dependencies": {
+    "googleapis": "^173.0.0"
+  }
+}

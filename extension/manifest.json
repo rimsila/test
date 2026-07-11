@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "URL Preview Side Panel",
+  "version": "1.0.0",
+  "description": "Preview a URL in a collapsible Chrome side panel.",
+  "permissions": ["sidePanel", "storage", "activeTab"],
+  "host_permissions": ["<all_urls>", "http://127.0.0.1:4783/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open URL Preview"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

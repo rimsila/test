@@ -1,0 +1,45 @@
+# Git metadata
+.git/**
+.git
+.gitignore
+.gitattributes
+
+# GitHub metadata (optional)
+.github/**
+
+# Dependencies
+node_modules/**
+vendor/**
+
+# Build and cache output
+.cache/**
+.tmp/**
+tmp/**
+dist/**
+build/**
+coverage/**
+
+# Editor settings
+.vscode/**
+.idea/**
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*~
+.tmp.drivedownload/**
+.tmp.driveupload/**
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+google-drive-credentials.json
+.google-drive-token.json

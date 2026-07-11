@@ -1,0 +1,20 @@
+Create the project files and save them directly into my Google Drive folder named **todo**.
+
+Do not create a ZIP file. Upload the actual project files, such as `index.html`, `style.css`, and `script.js`, directly into the folder.
+
+Ignore Git-related files and folders, including:
+
+- `.git/`
+- `.gitignore`
+- `.gitattributes`
+- `.github/`
+
+Also ignore unnecessary local or generated files such as:
+
+- `node_modules/`
+- `.DS_Store`
+- temporary files
+- cache files
+- build output, unless required to run the project
+
+If a file with the same name already exists in Google Drive, update or replace it instead of creating a duplicate.

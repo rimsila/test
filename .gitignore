@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+settings.json
+**/settings.json
+
+# Local auth and credential artifacts
+.google-drive-token.json
+google-drive-token.json
+credentials.json
+client_secret*.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output and caches
+dist/
+build/
+.cache/
+coverage/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
