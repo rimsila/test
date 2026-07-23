@@ -34,8 +34,14 @@ jobs:
         run: |
           set -euxo pipefail
           git clone --depth 1 https://github.com/CrispStrobe/CrispASR.git crispasr
-          cmake -S crispasr -B crispasr/build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build crispasr/build --parallel 2
+          cmake -S crispasr -B crispasr/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_CUDA=OFF \
+            2>&1 | tee configure.log
+          cmake --build crispasr/build --target crispasr --parallel 2 \
+            2>&1 | tee build.log
           test -x crispasr/build/bin/crispasr
           crispasr/build/bin/crispasr --help > crispasr-help.txt 2>&1 || true
 
@@ -111,4 +117,6 @@ jobs:
             voxcpm2-khmer-cpu.json
             voxcpm2-khmer-cpu.wav.sha256
             generation.log
+            configure.log
+            build.log
             crispasr-help.txt
