@@ -33,7 +33,8 @@ jobs:
       - name: Build current CrispASR CPU runtime
         run: |
           set -euxo pipefail
-          git clone --depth 1 https://github.com/CrispStrobe/CrispASR.git crispasr
+          git clone --depth 1 --recurse-submodules --shallow-submodules \
+            https://github.com/CrispStrobe/CrispASR.git crispasr
           cmake -S crispasr -B crispasr/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DWHISPER_BUILD_TESTS=OFF \
