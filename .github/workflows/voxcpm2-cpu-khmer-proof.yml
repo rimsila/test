@@ -1,0 +1,112 @@
+name: VoxCPM2 CPU Khmer Proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/voxcpm2-cpu-khmer-proof.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MODEL_URL: https://huggingface.co/cstr/voxcpm2-GGUF/resolve/main/voxcpm2-q4_k.gguf?download=true
+  MODEL_SHA256: 502efe74f6a59c370b3abf5a3fcfd7c3955ca6c167b411c8aee3977e9e46c079
+  KHMER_TEXT: សួស្តី! នេះជាសំឡេងភាសាខ្មែរដែលបង្កើតដោយ VoxCPM2 លើ CPU។
+
+jobs:
+  generate-khmer-audio:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build build-essential curl ca-certificates
+
+      - name: Build current CrispASR CPU runtime
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/CrispStrobe/CrispASR.git crispasr
+          cmake -S crispasr -B crispasr/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build crispasr/build --parallel 2
+          test -x crispasr/build/bin/crispasr
+          crispasr/build/bin/crispasr --help > crispasr-help.txt 2>&1 || true
+
+      - name: Download verified VoxCPM2 Q4 model
+        run: |
+          set -euxo pipefail
+          curl --fail --location --retry 8 --retry-all-errors --continue-at - \
+            --output voxcpm2-q4_k.gguf "$MODEL_URL"
+          echo "$MODEL_SHA256  voxcpm2-q4_k.gguf" | sha256sum --check --strict
+          ls -lh voxcpm2-q4_k.gguf
+
+      - name: Generate real Khmer speech on CPU
+        run: |
+          set -euxo pipefail
+          export VOXCPM2_USE_GRAPH=1
+          /usr/bin/time -v crispasr/build/bin/crispasr \
+            --backend voxcpm2-tts \
+            -ng \
+            -t 2 \
+            -m voxcpm2-q4_k.gguf \
+            --seed 42 \
+            --tts "$KHMER_TEXT" \
+            --tts-output voxcpm2-khmer-cpu.wav \
+            2>&1 | tee generation.log
+          test -s voxcpm2-khmer-cpu.wav
+
+      - name: Validate generated WAV
+        run: |
+          python3 - <<'PY'
+          import audioop
+          import hashlib
+          import json
+          import pathlib
+          import wave
+
+          path = pathlib.Path("voxcpm2-khmer-cpu.wav")
+          raw = path.read_bytes()
+          with wave.open(str(path), "rb") as wav:
+              info = {
+                  "channels": wav.getnchannels(),
+                  "sample_width": wav.getsampwidth(),
+                  "sample_rate": wav.getframerate(),
+                  "frames": wav.getnframes(),
+                  "duration_seconds": wav.getnframes() / wav.getframerate(),
+              }
+              pcm = wav.readframes(wav.getnframes())
+          info["rms"] = audioop.rms(pcm, info["sample_width"])
+          info["peak"] = audioop.max(pcm, info["sample_width"])
+          info["sha256"] = hashlib.sha256(raw).hexdigest()
+          info["text"] = "សួស្តី! នេះជាសំឡេងភាសាខ្មែរដែលបង្កើតដោយ VoxCPM2 លើ CPU។"
+          assert info["channels"] == 1, info
+          assert info["sample_width"] == 2, info
+          assert info["sample_rate"] in (24000, 48000), info
+          assert info["duration_seconds"] >= 1.0, info
+          assert info["rms"] > 100, info
+          assert info["peak"] > 500, info
+          pathlib.Path("voxcpm2-khmer-cpu.json").write_text(
+              json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          print(json.dumps(info, ensure_ascii=False, indent=2))
+          PY
+          sha256sum voxcpm2-khmer-cpu.wav > voxcpm2-khmer-cpu.wav.sha256
+
+      - name: Upload real Khmer audio
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxcpm2-khmer-cpu-output
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            voxcpm2-khmer-cpu.wav
+            voxcpm2-khmer-cpu.json
+            voxcpm2-khmer-cpu.wav.sha256
+            generation.log
+            crispasr-help.txt
