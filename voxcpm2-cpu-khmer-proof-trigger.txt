@@ -1,0 +1,1 @@
+Generate a real Khmer WAV with VoxCPM2 Q4 on a GitHub-hosted CPU runner.
